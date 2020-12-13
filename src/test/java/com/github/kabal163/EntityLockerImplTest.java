@@ -11,16 +11,17 @@ import org.mockito.MockitoAnnotations;
 
 import java.util.Collection;
 import java.util.List;
-import java.util.Set;
 import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.CyclicBarrier;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.function.Function;
 import java.util.stream.Stream;
 
 import static java.util.Collections.emptyList;
-import static java.util.stream.Collectors.toUnmodifiableSet;
+import static java.util.Collections.singletonList;
+import static java.util.stream.Collectors.toUnmodifiableList;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
@@ -32,6 +33,8 @@ import static org.mockito.Mockito.when;
  */
 class EntityLockerImplTest {
 
+    static final int NUMBER_OF_THREADS = 20;
+    static final int NUMBER_OF_INCREMENTS = 5000;
     static final long TEST_TIMEOUT_MILLIS = 500L;
     static final String TEST_KEY = "testKey";
 
@@ -160,107 +163,54 @@ class EntityLockerImplTest {
     }
 
     @Test
-    @DisplayName("Given 20 threads which increment a not thread safe counter 5000 times each " +
+    @DisplayName("Given 'n' threads which increment a not thread safe counter 'x' times each " +
             "When they increment the counter under the lock " +
-            "Then result counter equals to 100000")
-    void given20Threads_and5000increments_whenIncrementUnderLock_thenResultCounterIs100000() throws InterruptedException {
-        final int numberOfThreads = 20;
-        final int numberOfIncrements = 5000;
-        ExecutorService executorService = Executors.newFixedThreadPool(numberOfThreads);
-        CountDownLatch latch = new CountDownLatch(numberOfThreads);
-        CyclicBarrier barrier = new CyclicBarrier(numberOfThreads);
+            "Then result counter equals to 'n * x'")
+    void givenNThreads_andXIncrements_whenIncrementUnderLock_thenResultCounterIsNX() throws InterruptedException {
+        CountDownLatch latch = new CountDownLatch(NUMBER_OF_THREADS);
+        Counter counter = new Counter(TEST_KEY);
 
-        final Counter counter = new Counter(TEST_KEY);
-        for (int i = 0; i < numberOfThreads; i++) {
-            executorService.execute(() -> {
-                try {
-                    barrier.await();
-                    locker.lock(counter.getKey());
-                    for (int j = 0; j < numberOfIncrements; j++) {
-                        counter.increment();
-                    }
-                    locker.unlock(counter.getKey());
-                } catch (InterruptedException e) {
-                    throw new RuntimeException("Error while waiting a test suite is started!");
-                } catch (BrokenBarrierException e) {
-                    throw new RuntimeException("Barrier is broken! Error while waiting a test suite is started!");
-                } finally {
-                    latch.countDown();
-                }
-            });
-        }
+        runInParallel(
+                singletonList(counter),
+                latch,
+                keys -> {locker.lock(counter.getKey()); return true;});
         latch.await();
-        assertThat(counter.getValue()).isEqualTo(numberOfIncrements * numberOfThreads);
+
+        assertThat(counter.getValue()).isEqualTo(NUMBER_OF_THREADS * NUMBER_OF_INCREMENTS);
     }
 
     @Test
-    @DisplayName("Given 20 threads which increment a not thread safe counter 5000 times each " +
+    @DisplayName("Given 'n' threads which increment a not thread safe counter 'x' times each " +
             "When they increment the counter under the tryLock(T) " +
-            "Then result counter equals to 100000")
-    void given20Threads_and5000increments_whenIncrementUnderTryLock_thenResultCounterIs100000_1() throws InterruptedException {
-        final int numberOfThreads = 20;
-        final int numberOfIncrements = 5000;
-        ExecutorService executorService = Executors.newFixedThreadPool(numberOfThreads);
-        CountDownLatch latch = new CountDownLatch(numberOfThreads);
-        CyclicBarrier barrier = new CyclicBarrier(numberOfThreads);
+            "Then result counter equals to 'n * x'")
+    void givenNThreads_andXIncrements_whenIncrementUnderTryLock_thenResultCounterIsNX_1() throws InterruptedException {
+        CountDownLatch latch = new CountDownLatch(NUMBER_OF_THREADS);
+        Counter counter = new Counter(TEST_KEY);
 
-        final Counter counter = new Counter(TEST_KEY);
-        for (int i = 0; i < numberOfThreads; i++) {
-            executorService.execute(() -> {
-                try {
-                    barrier.await();
-                    if (locker.tryLock(counter.getKey())) {
-                        for (int j = 0; j < numberOfIncrements; j++) {
-                            counter.increment();
-                        }
-                    }
-                    locker.unlock(counter.getKey());
-                } catch (InterruptedException e) {
-                    throw new RuntimeException("Error while waiting a test suite is started!");
-                } catch (BrokenBarrierException e) {
-                    throw new RuntimeException("Barrier is broken! Error while waiting a test suite is started!");
-                } finally {
-                    latch.countDown();
-                }
-            });
-        }
+        runInParallel(
+                singletonList(counter),
+                latch,
+                keys -> locker.tryLock(counter.getKey(), TEST_TIMEOUT_MILLIS));
         latch.await();
-        assertThat(counter.getValue()).isEqualTo(numberOfIncrements * numberOfThreads);
+
+        assertThat(counter.getValue()).isEqualTo(NUMBER_OF_THREADS * NUMBER_OF_INCREMENTS);
     }
 
     @Test
-    @DisplayName("Given 20 threads which increment a not thread safe counter 5000 times each " +
+    @DisplayName("Given 'n' threads which increment a not thread safe counter 'x' times each " +
             "When they increment the counter under the tryLock(T, long) " +
-            "Then result counter equals to 100000")
-    void given20Threads_and5000increments_whenIncrementUnderTryLock_thenResultCounterIs100000_2() throws InterruptedException {
-        final int numberOfThreads = 20;
-        final int numberOfIncrements = 5000;
-        ExecutorService executorService = Executors.newFixedThreadPool(numberOfThreads);
-        CountDownLatch latch = new CountDownLatch(numberOfThreads);
-        CyclicBarrier barrier = new CyclicBarrier(numberOfThreads);
+            "Then result counter equals to 'n * x'")
+    void givenNThreads_andXIncrements_whenIncrementUnderTryLock_thenResultCounterIsNX_2() throws InterruptedException {
+        CountDownLatch latch = new CountDownLatch(NUMBER_OF_THREADS);
+        Counter counter = new Counter(TEST_KEY);
 
-        final Counter counter = new Counter(TEST_KEY);
-        for (int i = 0; i < numberOfThreads; i++) {
-            executorService.execute(() -> {
-                try {
-                    barrier.await();
-                    if (locker.tryLock(counter.getKey(), TEST_TIMEOUT_MILLIS)) {
-                        for (int j = 0; j < numberOfIncrements; j++) {
-                            counter.increment();
-                        }
-                    }
-                    locker.unlock(counter.getKey());
-                } catch (InterruptedException e) {
-                    throw new RuntimeException("Error while waiting a test suite is started!");
-                } catch (BrokenBarrierException e) {
-                    throw new RuntimeException("Barrier is broken! Error while waiting a test suite is started!");
-                } finally {
-                    latch.countDown();
-                }
-            });
-        }
+        runInParallel(
+                singletonList(counter),
+                latch,
+                keys -> locker.tryLock(counter.getKey()));
         latch.await();
-        assertThat(counter.getValue()).isEqualTo(numberOfIncrements * numberOfThreads);
+
+        assertThat(counter.getValue()).isEqualTo(NUMBER_OF_THREADS * NUMBER_OF_INCREMENTS);
     }
 
     @Test
@@ -323,33 +273,50 @@ class EntityLockerImplTest {
     }
 
     @Test
-    @DisplayName("Given 20 thread increment 5 counters 5000 times each " +
+    @DisplayName("Given 'n' thread increment 'm' counters 'x' times each " +
             "When increment them under lock(Collection<T>) " +
-            "Then result value of each counter will be 100000 ")
-    void given5Counters_and20Threads_and5000increments_whenIncrementUnderLock_thenResultOfEachCounterIs100000() throws InterruptedException {
+            "Then result value of each counter will be 'n * m' and total result is 'm * n * x' ")
+    void givenNCounters_andMThreads_andXIncrements_whenIncrementUnderLock_thenResultOfEachCounterIsNM() throws InterruptedException {
         List<Counter> counters = List.of(
                 new Counter("key1"),
                 new Counter("key2"),
                 new Counter("key3"),
                 new Counter("key4"),
                 new Counter("key5"));
-        Set<String> keys = counters.stream()
+        CountDownLatch latch = new CountDownLatch(NUMBER_OF_THREADS);
+
+        runInParallel(
+                counters,
+                latch,
+                keys -> {locker.lock(keys); return true;});
+        latch.await();
+
+        counters.forEach(c ->
+                assertThat(c.getValue())
+                        .isEqualTo(NUMBER_OF_THREADS * NUMBER_OF_INCREMENTS));
+        final int totalValue = counters.stream()
+                .map(Counter::getValue)
+                .reduce(0, Integer::sum);
+        assertThat(totalValue).isEqualTo(NUMBER_OF_THREADS * NUMBER_OF_INCREMENTS * counters.size());
+    }
+
+    private void runInParallel(final List<Counter> counters,
+                               final CountDownLatch latch,
+                               final Function<List<String>, Boolean> lockFunction) {
+        final ExecutorService executorService = Executors.newFixedThreadPool(NUMBER_OF_THREADS);
+        final CyclicBarrier barrier = new CyclicBarrier(NUMBER_OF_THREADS);
+        List<String> keys = counters.stream()
                 .map(Counter::getKey)
-                .collect(toUnmodifiableSet());
+                .collect(toUnmodifiableList());
 
-        final int numberOfThreads = 20;
-        final int numberOfIncrements = 5000;
-        ExecutorService executorService = Executors.newFixedThreadPool(numberOfThreads);
-        CountDownLatch latch = new CountDownLatch(numberOfThreads);
-        CyclicBarrier barrier = new CyclicBarrier(numberOfThreads);
-
-        for (int i = 0; i < numberOfThreads; i++) {
+        for (int i = 0; i < NUMBER_OF_THREADS; i++) {
             executorService.execute(() -> {
                 try {
                     barrier.await();
-                    locker.lock(keys);
-                    for (int j = 0; j < numberOfIncrements; j++) {
-                        counters.forEach(Counter::increment);
+                    if (lockFunction.apply(keys)) {
+                        for (int j = 0; j < NUMBER_OF_INCREMENTS; j++) {
+                            counters.forEach(Counter::increment);
+                        }
                     }
                     locker.unlock(keys);
                     latch.countDown();
@@ -360,14 +327,6 @@ class EntityLockerImplTest {
                 }
             });
         }
-        latch.await();
-        final int totalValue = counters.stream()
-                .map(Counter::getValue)
-                .reduce(0, Integer::sum);
-        assertThat(totalValue).isEqualTo(numberOfIncrements * numberOfThreads * counters.size());
-        counters.forEach(c ->
-                assertThat(c.getValue())
-                        .isEqualTo(numberOfIncrements * numberOfThreads));
     }
 
     static Stream<Arguments> getInvalidTimeouts() {

@@ -305,7 +305,7 @@ class EntityLockerImplTest {
                                final Function<List<String>, Boolean> lockFunction) {
         final ExecutorService executorService = Executors.newFixedThreadPool(NUMBER_OF_THREADS);
         final CyclicBarrier barrier = new CyclicBarrier(NUMBER_OF_THREADS);
-        List<String> keys = counters.stream()
+        final List<String> keys = counters.stream()
                 .map(Counter::getKey)
                 .collect(toUnmodifiableList());
 
@@ -319,11 +319,12 @@ class EntityLockerImplTest {
                         }
                     }
                     locker.unlock(keys);
-                    latch.countDown();
                 } catch (InterruptedException e) {
                     throw new RuntimeException("Error while waiting a test suite is started!");
                 } catch (BrokenBarrierException e) {
                     throw new RuntimeException("Barrier is broken! Error while waiting a test suite is started!");
+                } finally {
+                    latch.countDown();
                 }
             });
         }

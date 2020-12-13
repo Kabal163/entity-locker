@@ -8,37 +8,31 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.locks.Condition;
-import java.util.concurrent.locks.ReentrantLock;
 import java.util.stream.Collectors;
 
-import static java.util.concurrent.TimeUnit.MILLISECONDS;
-
 public class EntityLockerImpl<T extends Comparable<T>> implements EntityLocker<T> {
-
-    private static final int NO_TIMEOUT = 0;
 
     private final Map<T, LockOperation> locks = new ConcurrentHashMap<>();
     private final LockProperties properties;
 
-    public EntityLockerImpl(LockProperties properties) {
+    protected EntityLockerImpl(LockProperties properties) {
         this.properties = properties;
     }
 
     @Override
-    public void lock(T key) {
+    public void lock(final T key) {
         Objects.requireNonNull(key, "Error while locking! Argument 'key' must not be null!");
-        doLock(key, NO_TIMEOUT);
+        doLock(key, Timer.NO_TIMEOUT);
     }
 
     @Override
-    public void lock(Collection<T> keys) {
+    public void lock(final Collection<T> keys) {
         Objects.requireNonNull(keys, "Error while locking! Argument 'keys' must not be null!");
-        doLock(keys, NO_TIMEOUT);
+        doLock(keys, Timer.NO_TIMEOUT);
     }
 
     @Override
-    public boolean tryLock(T key) {
+    public boolean tryLock(final T key) {
         Objects.requireNonNull(key, "Error while locking! Argument 'key' must not be null!");
         return doLock(key, properties.getTimeoutMillis());
     }
@@ -50,21 +44,21 @@ public class EntityLockerImpl<T extends Comparable<T>> implements EntityLocker<T
     }
 
     @Override
-    public boolean tryLock(T key, long timeoutMillis) {
+    public boolean tryLock(final T key, final long timeoutMillis) {
         Objects.requireNonNull(key, "Error while locking! Argument 'key' must not be null!");
         checkTimeoutIsPositive(timeoutMillis);
         return doLock(key, timeoutMillis);
     }
 
     @Override
-    public boolean tryLock(Collection<T> keys, long timeoutMillis) {
+    public boolean tryLock(final Collection<T> keys, final long timeoutMillis) {
         Objects.requireNonNull(keys, "Error while locking! Argument 'keys' must not be null!");
         checkTimeoutIsPositive(timeoutMillis);
         return doLock(keys, timeoutMillis);
     }
 
     @Override
-    public void unlock(T key) {
+    public void unlock(final T key) {
         Objects.requireNonNull(key, "Argument 'key' must not be null!");
         doUnlock(key);
     }
@@ -78,8 +72,9 @@ public class EntityLockerImpl<T extends Comparable<T>> implements EntityLocker<T
     private boolean doLock(final Collection<T> keys, final long timeout) {
         final Set<T> sortedKeys = filterAndSort(keys);
         final LinkedList<T> lockedKeys = new LinkedList<>();
-        for (T key : sortedKeys) {
-            if (doLock(key, timeout)) {
+
+        for (final T key : sortedKeys) {
+            if (doLock(key, timeout)) { // todo handle exceptions
                 lockedKeys.addFirst(key);
             } else {
                 rollback(lockedKeys);
@@ -91,28 +86,30 @@ public class EntityLockerImpl<T extends Comparable<T>> implements EntityLocker<T
 
     private boolean doLock(final T key, final long timeout) {
         final long threadId = Thread.currentThread().getId();
-        LockOperation lockOperation = getOrCreateLockOperation(key, threadId);
-        lockOperation.lock();
 
-        long currentTime = System.currentTimeMillis();
-        long startTime = currentTime;
-        try {
+        synchronized (key) {
+            final Timer timer = new Timer(timeout);
+            LockOperation lockOperation = getOrCreateLockOperation(key, threadId);
             while (threadId != lockOperation.getThreadId()) {
-                long actualTimeout = timeout - (currentTime - startTime);
-                if (actualTimeout >= 0 && lockOperation.await(actualTimeout)) {
-                    lockOperation = getOrCreateLockOperation(key, threadId);
-                    currentTime = System.currentTimeMillis();
-                } else {
-                    return false;
+                System.out.println(Thread.currentThread().getName() + ", " + threadId + " Lock has already been acquired be another thread. Waiting... Owner threadId: " + lockOperation.getThreadId());
+                try {
+                    if (timer.isOver()) {
+                        System.out.println(Thread.currentThread().getName() + ", " + threadId + " Timeout is over");
+                        return false;
+                    } else if (timer.hasTimeout()) {
+                        key.wait(timer.timeLeft());
+                    } else {
+                        key.wait();
+                    }
+                } catch (InterruptedException ex) {
+                    Thread.currentThread().interrupt();
+                    throw new LockAcquiringException("Waiting was interrupted! Error while lock acquiring! Key: " + key, ex);
                 }
+                lockOperation = getOrCreateLockOperation(key, threadId);
             }
-            return true;
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
-            throw new LockAcquiringException("Waiting was interrupted! Error while lock acquiring! Key: " + key, ex);
-        } finally {
-            lockOperation.unlock();
         }
+        System.out.println(Thread.currentThread().getName() + ", " + threadId + " Lock successfully acquired.");
+        return true;
     }
 
     private void doUnlock(final T key) {
@@ -126,11 +123,11 @@ public class EntityLockerImpl<T extends Comparable<T>> implements EntityLocker<T
                     + threadId + "; Owner threadId: " + lockOperation.getThreadId());
         }
 
-        lockOperation.lock();
-        try {
-            lockOperation.signalAll();
-        } finally {
-            lockOperation.unlock();
+        synchronized (key) {
+            System.out.println(Thread.currentThread().getName() + ", " + threadId + " Removing lock...");
+            locks.remove(key);
+            key.notifyAll();
+            System.out.println(Thread.currentThread().getName() + ", " + threadId + " Removed");
         }
     }
 
@@ -140,7 +137,7 @@ public class EntityLockerImpl<T extends Comparable<T>> implements EntityLocker<T
 
     private Set<T> filterAndSort(Collection<T> keys) {
         return keys.stream()
-                .filter(Objects::isNull)
+                .filter(Objects::nonNull)
                 .sorted()
                 .collect(Collectors.toCollection(TreeSet::new));
     }
@@ -157,38 +154,44 @@ public class EntityLockerImpl<T extends Comparable<T>> implements EntityLocker<T
 
     private static final class LockOperation {
         private final long threadId;
-        private final ReentrantLock lock;
-        private final Condition condition;
 
         public LockOperation(long threadId) {
             this.threadId = threadId;
-            this.lock = new ReentrantLock();
-            this.condition = lock.newCondition();
         }
 
         public long getThreadId() {
             return threadId;
         }
+    }
 
-        public void lock() {
-            lock.lock();
-        }
+    private static final class Timer {
+        private final long timeout;
+        private final long deadline;
 
-        public boolean await(long timeoutMillis) throws InterruptedException {
-            if (timeoutMillis == NO_TIMEOUT) {
-                condition.await();
+        public static final long NO_TIMEOUT = -1L;
+
+        public Timer(long timeout) {
+            this.timeout = timeout;
+            if (NO_TIMEOUT != timeout) {
+                this.deadline = System.currentTimeMillis() + timeout;
             } else {
-                return condition.await(timeoutMillis, MILLISECONDS);
+                this.deadline = Long.MAX_VALUE;
             }
-            return true;
         }
 
-        public void signalAll() {
-            condition.signalAll();
+        public long timeLeft() {
+            if (hasTimeout()) {
+                return deadline - System.currentTimeMillis();
+            }
+            return timeout;
         }
 
-        public void unlock() {
-            lock.unlock();
+        public boolean hasTimeout() {
+            return timeout != NO_TIMEOUT;
+        }
+
+        public boolean isOver() {
+            return deadline <= System.currentTimeMillis();
         }
     }
 }

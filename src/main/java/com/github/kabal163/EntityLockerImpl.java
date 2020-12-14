@@ -73,11 +73,22 @@ public class EntityLockerImpl<T extends Comparable<T>> implements EntityLocker<T
         final Set<T> sortedKeys = filterAndSort(keys);
         final LinkedList<T> lockedKeys = new LinkedList<>();
 
+        Exception exception = null;
         for (final T key : sortedKeys) {
-            if (doLock(key, timeout)) { // todo handle exceptions
+            boolean locked;
+            try {
+                locked = doLock(key, timeout);
+            } catch (Exception ex) {
+                locked = false;
+                exception = ex;
+            }
+            if (locked) {
                 lockedKeys.addFirst(key);
             } else {
                 rollback(lockedKeys);
+                if (exception != null) {
+                    throw new LockAcquiringException("Error while acquiring collection of locks!", exception);
+                }
                 return false;
             }
         }
@@ -91,10 +102,8 @@ public class EntityLockerImpl<T extends Comparable<T>> implements EntityLocker<T
             final Timer timer = new Timer(timeout);
             LockOperation lockOperation = getOrCreateLockOperation(key, threadId);
             while (threadId != lockOperation.getThreadId()) {
-                System.out.println(Thread.currentThread().getName() + ", " + threadId + " Lock has already been acquired be another thread. Waiting... Owner threadId: " + lockOperation.getThreadId());
                 try {
                     if (timer.isOver()) {
-                        System.out.println(Thread.currentThread().getName() + ", " + threadId + " Timeout is over");
                         return false;
                     } else if (timer.hasTimeout()) {
                         key.wait(timer.timeLeft());
@@ -108,7 +117,6 @@ public class EntityLockerImpl<T extends Comparable<T>> implements EntityLocker<T
                 lockOperation = getOrCreateLockOperation(key, threadId);
             }
         }
-        System.out.println(Thread.currentThread().getName() + ", " + threadId + " Lock successfully acquired.");
         return true;
     }
 
@@ -124,10 +132,8 @@ public class EntityLockerImpl<T extends Comparable<T>> implements EntityLocker<T
         }
 
         synchronized (key) {
-            System.out.println(Thread.currentThread().getName() + ", " + threadId + " Removing lock...");
             locks.remove(key);
             key.notifyAll();
-            System.out.println(Thread.currentThread().getName() + ", " + threadId + " Removed");
         }
     }
 

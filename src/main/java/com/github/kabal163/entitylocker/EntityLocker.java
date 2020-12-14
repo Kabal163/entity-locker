@@ -174,17 +174,16 @@ public interface EntityLocker<T> {
      *
      * @param key a key which is associated which a lock which must be released
      * @throws NullPointerException      if {@code key} argument is {@code null}
-     * @throws LockAcquiringException    if {@code timeout} is zero or negative.
      * @throws ThreadIsNotOwnerException if the current thread is not the owner of the lock
      */
     void unlock(T key);
 
     /**
-     * Releases locks which are associated with the specified keys.
+     * Releases locks which are associated with the specified keys. If there
+     * are no locks associated then nothing happens.
      *
      * @param keys a key which is associated which a lock which must be released
      * @throws NullPointerException      if {@code keys} argument is {@code null}
-     * @throws LockAcquiringException    if {@code timeout} is zero or negative.
      * @throws ThreadIsNotOwnerException if the current thead is not the owned of at least one lock
      */
     void unlock(Collection<T> keys);

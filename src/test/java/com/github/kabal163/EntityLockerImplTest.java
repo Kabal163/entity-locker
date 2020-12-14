@@ -20,8 +20,9 @@ import java.util.function.Function;
 import java.util.stream.Stream;
 
 import static java.util.Collections.emptyList;
+import static java.util.Collections.shuffle;
 import static java.util.Collections.singletonList;
-import static java.util.stream.Collectors.toUnmodifiableList;
+import static java.util.stream.Collectors.toList;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
@@ -300,6 +301,73 @@ class EntityLockerImplTest {
         assertThat(totalValue).isEqualTo(NUMBER_OF_THREADS * NUMBER_OF_INCREMENTS * counters.size());
     }
 
+    @Test
+    @DisplayName("Given 'n' thread increment 'm' counters 'x' times each " +
+            "When increment them under tryLock(Collection<T>) " +
+            "Then result value of each counter will be 'n * m' and total result is 'm * n * x' ")
+    void givenNCounters_andMThreads_andXIncrements_whenIncrementUnderTryLock_thenResultOfEachCounterIsNM_1() throws InterruptedException {
+        List<Counter> counters = List.of(
+                new Counter("key1"),
+                new Counter("key2"),
+                new Counter("key3"),
+                new Counter("key4"),
+                new Counter("key5"));
+        CountDownLatch latch = new CountDownLatch(NUMBER_OF_THREADS);
+
+        runInParallel(
+                counters,
+                latch,
+                keys -> {locker.tryLock(keys); return true;});
+        latch.await();
+
+        counters.forEach(c ->
+                assertThat(c.getValue())
+                        .isEqualTo(NUMBER_OF_THREADS * NUMBER_OF_INCREMENTS));
+        final int totalValue = counters.stream()
+                .map(Counter::getValue)
+                .reduce(0, Integer::sum);
+        assertThat(totalValue).isEqualTo(NUMBER_OF_THREADS * NUMBER_OF_INCREMENTS * counters.size());
+    }
+
+    @Test
+    @DisplayName("Given 'n' thread increment 'm' counters 'x' times each " +
+            "When increment them under tryLock(Collection<T>, long) " +
+            "Then result value of each counter will be 'n * m' and total result is 'm * n * x' ")
+    void givenNCounters_andMThreads_andXIncrements_whenIncrementUnderTryLock_thenResultOfEachCounterIsNM_2() throws InterruptedException {
+        List<Counter> counters = List.of(
+                new Counter("key1"),
+                new Counter("key2"),
+                new Counter("key3"),
+                new Counter("key4"),
+                new Counter("key5"));
+        CountDownLatch latch = new CountDownLatch(NUMBER_OF_THREADS);
+
+        runInParallel(
+                counters,
+                latch,
+                keys -> {locker.tryLock(keys, TEST_TIMEOUT_MILLIS); return true;});
+        latch.await();
+
+        counters.forEach(c ->
+                assertThat(c.getValue())
+                        .isEqualTo(NUMBER_OF_THREADS * NUMBER_OF_INCREMENTS));
+        final int totalValue = counters.stream()
+                .map(Counter::getValue)
+                .reduce(0, Integer::sum);
+        assertThat(totalValue).isEqualTo(NUMBER_OF_THREADS * NUMBER_OF_INCREMENTS * counters.size());
+    }
+
+    /**
+     * Runs counters increment in parallel.
+     * Uses {@link CyclicBarrier} to start all threads in the same time. It gives
+     * additional stress for the system.
+     *
+     * @param counters which must be incremented concurrently
+     * @param latch is used to signal that all threads has been finished
+     * @param lockFunction defines a function which acquires a lock. Can acquire the lock in different ways.
+     *
+     * @see EntityLocker for more details about lock methods.
+     */
     private void runInParallel(final List<Counter> counters,
                                final CountDownLatch latch,
                                final Function<List<String>, Boolean> lockFunction) {
@@ -307,11 +375,12 @@ class EntityLockerImplTest {
         final CyclicBarrier barrier = new CyclicBarrier(NUMBER_OF_THREADS);
         final List<String> keys = counters.stream()
                 .map(Counter::getKey)
-                .collect(toUnmodifiableList());
+                .collect(toList());
 
         for (int i = 0; i < NUMBER_OF_THREADS; i++) {
             executorService.execute(() -> {
                 try {
+                    shuffle(keys);
                     barrier.await();
                     if (lockFunction.apply(keys)) {
                         for (int j = 0; j < NUMBER_OF_INCREMENTS; j++) {
@@ -337,6 +406,9 @@ class EntityLockerImplTest {
         );
     }
 
+    /**
+     * Not thread safe
+     */
     private static final class Counter {
         private final String key;
         private int value = 0;

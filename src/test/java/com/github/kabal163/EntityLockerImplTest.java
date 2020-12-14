@@ -10,6 +10,7 @@ import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
 import java.util.concurrent.BrokenBarrierException;
 import java.util.concurrent.CountDownLatch;
@@ -40,7 +41,7 @@ class EntityLockerImplTest {
     static final String TEST_KEY = "testKey";
 
     @Mock
-    LockProperties properties;
+    LockProperties<String> properties;
 
     EntityLockerImpl<String> locker;
 
@@ -48,6 +49,7 @@ class EntityLockerImplTest {
     void setUp() {
         MockitoAnnotations.initMocks(this);
         when(properties.getTimeoutMillis()).thenReturn(TEST_TIMEOUT_MILLIS);
+        when(properties.getComparator()).thenReturn(Comparator.naturalOrder());
 
         locker = new EntityLockerImpl<>(properties);
     }

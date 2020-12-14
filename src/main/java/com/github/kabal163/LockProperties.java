@@ -1,34 +1,52 @@
 package com.github.kabal163;
 
-public class LockProperties {
+import java.util.Comparator;
+
+public class LockProperties<T> {
 
     private final long timeoutMillis;
+    private final Comparator<T> comparator;
 
-    private LockProperties(long timeoutMillis) {
+    private LockProperties(long timeoutMillis,
+                           Comparator<T> comparator) {
         this.timeoutMillis = timeoutMillis;
+        this.comparator = comparator;
     }
 
-    public static Builder builder() {
-        return new Builder();
+    public static <T> Builder<T> builder() {
+        return new Builder<>();
     }
 
     public long getTimeoutMillis() {
         return timeoutMillis;
     }
 
-    public static final class Builder {
-        private long timeoutMillis;
+    public Comparator<T> getComparator() {
+        return comparator;
+    }
 
-        public Builder timeout(long timeout) {
+    public static final class Builder<T> {
+        private long timeoutMillis;
+        private Comparator<T> comparator;
+
+        public Builder<T> timeout(long timeout) {
             this.timeoutMillis = timeout;
             return this;
         }
 
-        public LockProperties build() {
+        public Builder<T> comparator(Comparator<T> comparator) {
+            this.comparator = comparator;
+            return this;
+        }
+
+        public LockProperties<T> build() {
             if (timeoutMillis <= 0) {
                 throw new IllegalArgumentException("Timeout must be positive!");
             }
-            return new LockProperties(timeoutMillis);
+            if (comparator == null) {
+                throw new IllegalStateException("Comparator must not be null!");
+            }
+            return new LockProperties<>(timeoutMillis, comparator);
         }
     }
 }

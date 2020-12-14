@@ -10,62 +10,62 @@ import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
-public class EntityLockerImpl<T extends Comparable<T>> implements EntityLocker<T> {
+public class EntityLockerImpl<T> implements EntityLocker<T> {
 
     private final Map<T, LockOperation> locks = new ConcurrentHashMap<>();
-    private final LockProperties properties;
+    private final LockProperties<T> properties;
 
-    protected EntityLockerImpl(LockProperties properties) {
+    protected EntityLockerImpl(LockProperties<T> properties) {
         this.properties = properties;
     }
 
     @Override
     public void lock(final T key) {
-        Objects.requireNonNull(key, "Error while locking! Argument 'key' must not be null!");
+        Objects.requireNonNull(key, "Error while locking! Parameter 'key' must not be null!");
         doLock(key, Timer.NO_TIMEOUT);
     }
 
     @Override
     public void lock(final Collection<T> keys) {
-        Objects.requireNonNull(keys, "Error while locking! Argument 'keys' must not be null!");
+        Objects.requireNonNull(keys, "Error while locking! Parameter 'keys' must not be null!");
         doLock(keys, Timer.NO_TIMEOUT);
     }
 
     @Override
     public boolean tryLock(final T key) {
-        Objects.requireNonNull(key, "Error while locking! Argument 'key' must not be null!");
+        Objects.requireNonNull(key, "Error while locking! Parameter 'key' must not be null!");
         return doLock(key, properties.getTimeoutMillis());
     }
 
     @Override
     public boolean tryLock(final Collection<T> keys) {
-        Objects.requireNonNull(keys, "Error while locking! Argument 'keys' must not be null!");
+        Objects.requireNonNull(keys, "Error while locking! Parameter 'keys' must not be null!");
         return doLock(keys, properties.getTimeoutMillis());
     }
 
     @Override
     public boolean tryLock(final T key, final long timeoutMillis) {
-        Objects.requireNonNull(key, "Error while locking! Argument 'key' must not be null!");
+        Objects.requireNonNull(key, "Error while locking! Parameter 'key' must not be null!");
         checkTimeoutIsPositive(timeoutMillis);
         return doLock(key, timeoutMillis);
     }
 
     @Override
     public boolean tryLock(final Collection<T> keys, final long timeoutMillis) {
-        Objects.requireNonNull(keys, "Error while locking! Argument 'keys' must not be null!");
+        Objects.requireNonNull(keys, "Error while locking! Parameter 'keys' must not be null!");
         checkTimeoutIsPositive(timeoutMillis);
         return doLock(keys, timeoutMillis);
     }
 
     @Override
     public void unlock(final T key) {
-        Objects.requireNonNull(key, "Argument 'key' must not be null!");
+        Objects.requireNonNull(key, "Parameter 'key' must not be null!");
         doUnlock(key);
     }
 
     @Override
     public void unlock(final Collection<T> keys) {
-        Objects.requireNonNull(keys, "Argument 'keys' must not be null!");
+        Objects.requireNonNull(keys, "Parameter 'keys' must not be null!");
         filterAndSort(keys).forEach(this::doUnlock);
     }
 
@@ -112,7 +112,7 @@ public class EntityLockerImpl<T extends Comparable<T>> implements EntityLocker<T
                     }
                 } catch (InterruptedException ex) {
                     Thread.currentThread().interrupt();
-                    throw new LockAcquiringException("Waiting was interrupted! Error while lock acquiring! Key: " + key, ex);
+                    throw new LockAcquiringException("Waiting has been interrupted! Error while lock acquiring! Key: " + key, ex);
                 }
                 lockOperation = getOrCreateLockOperation(key, threadId);
             }
@@ -144,7 +144,7 @@ public class EntityLockerImpl<T extends Comparable<T>> implements EntityLocker<T
     private Set<T> filterAndSort(Collection<T> keys) {
         return keys.stream()
                 .filter(Objects::nonNull)
-                .sorted()
+                .sorted(properties.getComparator())
                 .collect(Collectors.toCollection(TreeSet::new));
     }
 
@@ -178,7 +178,7 @@ public class EntityLockerImpl<T extends Comparable<T>> implements EntityLocker<T
 
         public Timer(long timeout) {
             this.timeout = timeout;
-            if (NO_TIMEOUT != timeout) {
+            if (hasTimeout()) {
                 this.deadline = System.currentTimeMillis() + timeout;
             } else {
                 this.deadline = Long.MAX_VALUE;

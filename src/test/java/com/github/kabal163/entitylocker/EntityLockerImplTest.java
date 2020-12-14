@@ -372,7 +372,6 @@ class EntityLockerImplTest {
             locker.lock(counter.getKey());
             counter.increment();
         }
-        locker.unlock(counter.getKey());
 
         assertThat(counter.getValue()).isEqualTo(reentrancyTimes);
     }
@@ -388,7 +387,6 @@ class EntityLockerImplTest {
             locker.lock(List.of(counter.getKey()));
             counter.increment();
         }
-        locker.unlock(counter.getKey());
 
         assertThat(counter.getValue()).isEqualTo(reentrancyTimes);
     }
@@ -404,7 +402,6 @@ class EntityLockerImplTest {
             locker.tryLock(counter.getKey());
             counter.increment();
         }
-        locker.unlock(counter.getKey());
 
         assertThat(counter.getValue()).isEqualTo(reentrancyTimes);
     }
@@ -420,7 +417,6 @@ class EntityLockerImplTest {
             locker.tryLock(List.of(counter.getKey()));
             counter.increment();
         }
-        locker.unlock(counter.getKey());
 
         assertThat(counter.getValue()).isEqualTo(reentrancyTimes);
     }
@@ -436,7 +432,6 @@ class EntityLockerImplTest {
             locker.tryLock(counter.getKey(), TEST_TIMEOUT_MILLIS);
             counter.increment();
         }
-        locker.unlock(counter.getKey());
 
         assertThat(counter.getValue()).isEqualTo(reentrancyTimes);
     }
@@ -452,7 +447,6 @@ class EntityLockerImplTest {
             locker.tryLock(List.of(counter.getKey()), TEST_TIMEOUT_MILLIS);
             counter.increment();
         }
-        locker.unlock(counter.getKey());
 
         assertThat(counter.getValue()).isEqualTo(reentrancyTimes);
     }

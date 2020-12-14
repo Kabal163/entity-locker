@@ -13,6 +13,7 @@ import java.util.Collection;
  * in all threads which try to acquire a lock. Keys are treated the same
  * only if they have reference to the same object. Otherwise they are
  * treated as different keys and client will get different locks for them.
+ * All methods should provide reentrancy. For more details see implementation.
  *
  * @param <T> type of the key which is used to acquire a lock
  */

@@ -1,6 +1,7 @@
 package com.github.kabal163.entitylocker;
 
 import javax.annotation.concurrent.Immutable;
+import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Collection;
 import java.util.LinkedList;
@@ -12,6 +13,11 @@ import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
+/**
+ * Supports reentrant locks.
+ *
+ * @param <T> type of the key which is used to acquire a lock
+ */
 @Immutable
 @ThreadSafe
 public class EntityLockerImpl<T> implements EntityLocker<T> {
@@ -105,24 +111,39 @@ public class EntityLockerImpl<T> implements EntityLocker<T> {
 
         synchronized (key) {
             final Timer timer = new Timer(timeout);
-            LockOperation lockOperation = getOrCreateLockOperation(key, threadId);
-            while (threadId != lockOperation.getThreadId()) {
-                try {
+
+            LockOperation lockOperation;
+            do {
+                lockOperation = locks.get(key);
+                if (lockOperation == null) {
+                    lockOperation = new LockOperation(threadId);
+                }
+                if (threadId == lockOperation.getThreadId()) {
+                    lockOperation.increment();
+                    locks.put(key, lockOperation);
+                } else {
                     if (timer.isOver()) {
                         return false;
-                    } else if (timer.hasTimeout()) {
-                        key.wait(timer.timeLeft());
                     } else {
-                        key.wait();
+                        waitForSignal(key, timer);
                     }
-                } catch (InterruptedException ex) {
-                    Thread.currentThread().interrupt();
-                    throw new LockAcquiringException("Waiting has been interrupted! Error while lock acquiring! Key: " + key, ex);
                 }
-                lockOperation = getOrCreateLockOperation(key, threadId);
-            }
+            } while (threadId != lockOperation.getThreadId());
         }
         return true;
+    }
+
+    private void waitForSignal(T key, Timer timer) {
+        try {
+            if (timer.hasTimeout()) {
+                key.wait(timer.timeLeft());
+            } else {
+                key.wait();
+            }
+        } catch (InterruptedException ex) {
+            Thread.currentThread().interrupt();
+            throw new LockAcquiringException("Waiting has been interrupted! Error while lock acquiring! Key: " + key, ex);
+        }
     }
 
     private void doUnlock(final T key) {
@@ -134,16 +155,16 @@ public class EntityLockerImpl<T> implements EntityLocker<T> {
         if (threadId != lockOperation.getThreadId()) {
             throw new ThreadIsNotOwnerException("The current thread is not the owner of the lock! Current threadId: "
                     + threadId + "; Owner threadId: " + lockOperation.getThreadId());
+        } else {
+            lockOperation.decrement();
         }
 
-        synchronized (key) {
-            locks.remove(key);
-            key.notifyAll();
+        if (lockOperation.getReentrancyCount() == 0) {
+            synchronized (key) {
+                locks.remove(key);
+                key.notifyAll();
+            }
         }
-    }
-
-    private LockOperation getOrCreateLockOperation(final T key, final long threadId) {
-        return locks.computeIfAbsent(key, k -> new LockOperation(threadId));
     }
 
     private Set<T> filterAndSort(Collection<T> keys) {
@@ -163,8 +184,10 @@ public class EntityLockerImpl<T> implements EntityLocker<T> {
         }
     }
 
+    @NotThreadSafe
     private static final class LockOperation {
         private final long threadId;
+        private int reentrancyCount = 0;
 
         public LockOperation(long threadId) {
             this.threadId = threadId;
@@ -173,8 +196,21 @@ public class EntityLockerImpl<T> implements EntityLocker<T> {
         public long getThreadId() {
             return threadId;
         }
+
+        public void increment() {
+            reentrancyCount++;
+        }
+
+        public void decrement() {
+            reentrancyCount--;
+        }
+
+        public int getReentrancyCount() {
+            return reentrancyCount;
+        }
     }
 
+    @ThreadSafe
     private static final class Timer {
         private final long timeout;
         private final long deadline;

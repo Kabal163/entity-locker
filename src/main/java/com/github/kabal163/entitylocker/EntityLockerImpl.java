@@ -106,12 +106,21 @@ public class EntityLockerImpl<T> implements EntityLocker<T> {
         return true;
     }
 
+    /**
+     * Gets lock operation until it will have the same threadId as the current thread has
+     * or fail by timeout or an exception. It means one of the four:
+     * <ul>
+     * <li>{@link #locks} doesn't have a lock associated with the {@code key}
+     * <li>The current thread gets its owning lock operation which means reentrancy
+     * <li>Specified timeout is over
+     * <li>{@link InterruptedException} is thrown
+     * </ul>
+     */
     private boolean doLock(final T key, final long timeout) {
         final long threadId = Thread.currentThread().getId();
 
         synchronized (key) {
             final Timer timer = new Timer(timeout);
-
             LockOperation lockOperation;
             do {
                 lockOperation = locks.get(key);
@@ -149,6 +158,7 @@ public class EntityLockerImpl<T> implements EntityLocker<T> {
     private void doUnlock(final T key) {
         final long threadId = Thread.currentThread().getId();
         final LockOperation lockOperation = locks.get(key);
+
         if (lockOperation == null) {
             return;
         }

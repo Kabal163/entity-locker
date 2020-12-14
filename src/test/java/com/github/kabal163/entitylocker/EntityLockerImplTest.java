@@ -1,4 +1,4 @@
-package com.github.kabal163;
+package com.github.kabal163.entitylocker;
 
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -9,6 +9,7 @@ import org.junit.jupiter.params.provider.MethodSource;
 import org.mockito.Mock;
 import org.mockito.MockitoAnnotations;
 
+import javax.annotation.concurrent.NotThreadSafe;
 import java.util.Collection;
 import java.util.Comparator;
 import java.util.List;
@@ -32,6 +33,7 @@ import static org.mockito.Mockito.when;
  * Some tests may fail due to timeouts.
  * It depends on the machine and it's current load where tests are running.
  * If the machine is slow be sure you have selected appropriate timeout.
+ * @see #TEST_TIMEOUT_MILLIS
  */
 class EntityLockerImplTest {
 
@@ -408,9 +410,7 @@ class EntityLockerImplTest {
         );
     }
 
-    /**
-     * Not thread safe
-     */
+    @NotThreadSafe
     private static final class Counter {
         private final String key;
         private int value = 0;

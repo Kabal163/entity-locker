@@ -1,4 +1,4 @@
-package com.github.kabal163;
+package com.github.kabal163.entitylocker;
 
 public class LockAcquiringException extends RuntimeException {
 

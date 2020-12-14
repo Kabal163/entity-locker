@@ -1,5 +1,7 @@
-package com.github.kabal163;
+package com.github.kabal163.entitylocker;
 
+import javax.annotation.concurrent.Immutable;
+import javax.annotation.concurrent.ThreadSafe;
 import java.util.Collection;
 import java.util.LinkedList;
 import java.util.List;
@@ -10,12 +12,15 @@ import java.util.TreeSet;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
+@Immutable
+@ThreadSafe
 public class EntityLockerImpl<T> implements EntityLocker<T> {
 
     private final Map<T, LockOperation> locks = new ConcurrentHashMap<>();
     private final LockProperties<T> properties;
 
-    protected EntityLockerImpl(LockProperties<T> properties) {
+    public EntityLockerImpl(LockProperties<T> properties) {
+        Objects.requireNonNull(properties, "Properties must not be null!");
         this.properties = properties;
     }
 

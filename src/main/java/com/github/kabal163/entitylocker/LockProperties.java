@@ -1,7 +1,11 @@
-package com.github.kabal163;
+package com.github.kabal163.entitylocker;
 
+import javax.annotation.concurrent.Immutable;
+import javax.annotation.concurrent.ThreadSafe;
 import java.util.Comparator;
 
+@Immutable
+@ThreadSafe
 public class LockProperties<T> {
 
     private final long timeoutMillis;

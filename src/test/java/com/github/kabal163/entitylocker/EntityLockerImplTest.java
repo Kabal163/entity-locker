@@ -361,6 +361,102 @@ class EntityLockerImplTest {
         assertThat(totalValue).isEqualTo(NUMBER_OF_THREADS * NUMBER_OF_INCREMENTS * counters.size());
     }
 
+    @Test
+    @DisplayName("Given one key for locking " +
+            "When a thread acquire lock(T) several times " +
+            "Then it must not lock itself")
+    void givenOneKey_whenThreadAcquireLockSeveralTimes_thenItMustNotLockItself_1() {
+        final int reentrancyTimes = 5;
+        final Counter counter = new Counter(TEST_KEY);
+        for (int i = 0; i < reentrancyTimes; i++) {
+            locker.lock(counter.getKey());
+            counter.increment();
+        }
+        locker.unlock(counter.getKey());
+
+        assertThat(counter.getValue()).isEqualTo(reentrancyTimes);
+    }
+
+    @Test
+    @DisplayName("Given one key for locking " +
+            "When a thread acquire lock(Collection<T>) several times " +
+            "Then it must not lock itself")
+    void givenOneKey_whenThreadAcquireLockSeveralTimes_thenItMustNotLockItself_2() {
+        final int reentrancyTimes = 5;
+        final Counter counter = new Counter(TEST_KEY);
+        for (int i = 0; i < reentrancyTimes; i++) {
+            locker.lock(List.of(counter.getKey()));
+            counter.increment();
+        }
+        locker.unlock(counter.getKey());
+
+        assertThat(counter.getValue()).isEqualTo(reentrancyTimes);
+    }
+
+    @Test
+    @DisplayName("Given one key for locking " +
+            "When a thread acquire tryLock(T) several times " +
+            "Then it must not lock itself")
+    void givenOneKey_whenThreadAcquireTryLockSeveralTimes_thenItMustNotLockItself_1() {
+        final int reentrancyTimes = 5;
+        final Counter counter = new Counter(TEST_KEY);
+        for (int i = 0; i < reentrancyTimes; i++) {
+            locker.tryLock(counter.getKey());
+            counter.increment();
+        }
+        locker.unlock(counter.getKey());
+
+        assertThat(counter.getValue()).isEqualTo(reentrancyTimes);
+    }
+
+    @Test
+    @DisplayName("Given one key for locking " +
+            "When a thread acquire tryLock(Collection<T>) several times " +
+            "Then it must not lock itself")
+    void givenOneKey_whenThreadAcquireTryLockSeveralTimes_thenItMustNotLockItself_2() {
+        final int reentrancyTimes = 5;
+        final Counter counter = new Counter(TEST_KEY);
+        for (int i = 0; i < reentrancyTimes; i++) {
+            locker.tryLock(List.of(counter.getKey()));
+            counter.increment();
+        }
+        locker.unlock(counter.getKey());
+
+        assertThat(counter.getValue()).isEqualTo(reentrancyTimes);
+    }
+
+    @Test
+    @DisplayName("Given one key for locking " +
+            "When a thread acquire tryLock(T, long) several times " +
+            "Then it must not lock itself")
+    void givenOneKey_whenThreadAcquireTryLockSeveralTimes_thenItMustNotLockItself_3() {
+        final int reentrancyTimes = 5;
+        final Counter counter = new Counter(TEST_KEY);
+        for (int i = 0; i < reentrancyTimes; i++) {
+            locker.tryLock(counter.getKey(), TEST_TIMEOUT_MILLIS);
+            counter.increment();
+        }
+        locker.unlock(counter.getKey());
+
+        assertThat(counter.getValue()).isEqualTo(reentrancyTimes);
+    }
+
+    @Test
+    @DisplayName("Given one key for locking " +
+            "When a thread acquire tryLock(Collection<T>, long) several times " +
+            "Then it must not lock itself")
+    void givenOneKey_whenThreadAcquireTryLockSeveralTimes_thenItMustNotLockItself_4() {
+        final int reentrancyTimes = 5;
+        final Counter counter = new Counter(TEST_KEY);
+        for (int i = 0; i < reentrancyTimes; i++) {
+            locker.tryLock(List.of(counter.getKey()), TEST_TIMEOUT_MILLIS);
+            counter.increment();
+        }
+        locker.unlock(counter.getKey());
+
+        assertThat(counter.getValue()).isEqualTo(reentrancyTimes);
+    }
+
     /**
      * Runs counters increment in parallel.
      * Uses {@link CyclicBarrier} to start all threads in the same time. It gives

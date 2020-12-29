@@ -4,13 +4,13 @@ import javax.annotation.concurrent.Immutable;
 import javax.annotation.concurrent.NotThreadSafe;
 import javax.annotation.concurrent.ThreadSafe;
 import java.util.Collection;
-import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.TreeSet;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.stream.Collectors;
 
 /**
@@ -22,7 +22,7 @@ import java.util.stream.Collectors;
 @ThreadSafe
 public class EntityLockerImpl<T> implements EntityLocker<T> {
 
-    private final Map<T, LockOperation> locks = new HashMap<>();
+    private final Map<T, LockOperation> locks = new ConcurrentHashMap<>();
     private final LockProperties<T> properties;
 
     public EntityLockerImpl(LockProperties<T> properties) {
